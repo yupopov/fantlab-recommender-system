@@ -46,6 +46,8 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+with open(argparse.work_ids, 'r') as f:
+  work_ids = f.read().split('\n')
 
 
 failed_work_ids = []
