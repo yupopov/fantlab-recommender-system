@@ -5,6 +5,7 @@ import json
 import re
 
 # from tqdm.auto import tqdm
+import numpy as np
 from tqdm.asyncio import tqdm_asyncio
 import aiohttp
 
@@ -37,32 +38,46 @@ with open(args.work_ids, 'r') as f:
     work_ids = f.read().split('\n')
 
 
+def get_marks_from_html(html, work_id) -> list:
+    marks_strs = html[html.find('marks = []'): html.find('</script><br><br><b>') - 1].split('\n')
+    marks_dicts = [
+      {
+        'user_id': int(re.search(pattern=r'\.userid=\d+', string=marks_str).group(0).split('=')[-1]),
+        'mark': int(re.search(pattern=r'\.mark=\d{1,2}', string=marks_str).group(0).split('=')[-1]),
+        'date': re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-1],
+        'work_id': work_id
+      } for marks_str in marks_strs]
+
 
 async def fetch(session, work_id):
-    await asyncio.sleep(5)
+    sleep_time = np.random.uniform(low=1, high=1.2)
+    await asyncio.sleep(sleep_time)
     url = args.query_template.format(work_id=work_id)
     async with session.get(url) as response:
         result = await response.text('utf-8')
-        print(result[:110])
-        marks_strs = result[result.find('marks = []'): result.find('</script><br><br><b>') - 1].split('\n')
-        marks_dicts = [{'user_id': int(re.search(pattern=r'\.userid=\d+', string=marks_str).group(0).split('=')[-1]),
-                        'mark': int(re.search(pattern=r'\.mark=\d{1,2}', string=marks_str).group(0).split('=')[-1]),
-                        'date': re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-1],
-                        'work_id': work_id
-                        } for marks_str in marks_strs]
+        # print(result[:110])
 
-    async with asyncio.Semaphore(10):
-        return await marks_dicts
+        marks_dicts = get_marks_from_html(result, work_id)
+        return marks_dicts
+
+    # async with asyncio.Semaphore(10):
+    #     return await marks_dicts
+
+
+async def fetch_with_sem(session, work_id, sem):
+    async with sem:
+        return await fetch(session, work_id)
 
 
 async def main():
     marks = []
+    sem = asyncio.Semaphore(4)
     async with aiohttp.ClientSession() as session:
         # results = await asyncio.gather(
         #   *tqdm([fetch(session, url) for url in urls])
         # )
         results = await tqdm_asyncio.gather(
-          *[fetch(session, work_id) for work_id in work_ids]
+          *[fetch_with_sem(session, work_id, sem) for work_id in work_ids]
         )
         marks.extend(results)
         with gzip.open(args.work_marks, 'wt') as f:
