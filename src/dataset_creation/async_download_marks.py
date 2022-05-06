@@ -49,8 +49,8 @@ args = parser.parse_args()
 with open(args.work_ids, 'r') as f:
   work_ids = f.read().split('\n')
 
-
 failed_work_ids = []
+
 
 
 def get_marks_from_html(html, work_id) -> list:
@@ -98,8 +98,8 @@ async def main():
     attempt_num = 1 # counting attempts to download the htmls
     sem = asyncio.Semaphore(50)
     results = []
-    async with aiohttp.ClientSession() as session:
-        while work_ids and attempt_num < 10:
+    while work_ids and attempt_num < 10:
+        async with aiohttp.ClientSession() as session:
             print(f'Starting attempt {attempt_num}...')
             attempt_results = await tqdm_asyncio.gather(
                 *[fetch_with_sem(session, work_id, sem) for work_id in work_ids],
