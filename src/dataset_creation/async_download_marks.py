@@ -51,7 +51,7 @@ async def fetch(session, work_id):
                         'work_id': work_id
                         } for marks_str in marks_strs]
 
-
+    async with asyncio.Semaphore(10):
         return await marks_dicts
 
 
