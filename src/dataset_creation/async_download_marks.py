@@ -5,6 +5,7 @@ import json
 import re
 import csv
 from itertools import chain
+from zipfile import ZipFile
 
 # from tqdm.auto import tqdm
 import numpy as np
@@ -31,7 +32,7 @@ parser.add_argument(
     'work_marks',
     type=str,
     nargs='?',
-    default='data/raw/work_marks.json.gz',
+    default='data/raw/work_marks.csv.gz',
     help='path to target file'
 )
 
@@ -52,7 +53,7 @@ def get_marks_from_html(html, work_id) -> list:
     marks = tuple((
         int(re.search(pattern=r'\.userid=\d+', string=marks_str).group(0).split('=')[-1]),
         int(re.search(pattern=r'\.mark=\d{1,2}', string=marks_str).group(0).split('=')[-1]),
-        re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-9],
+        re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-10],
     ) for marks_str in marks_strs)
 
     # return mark_dicts
@@ -94,11 +95,10 @@ async def main():
         
         # with gzip.open(args.work_marks, 'wt') as f:
         #       (results, f)
-        with open(args.work_marks, 'w') as out:
+        with gzip.open(args.work_marks, 'wt') as out:
             csv_out=csv.writer(out)
             csv_out.writerow(['user_id', 'mark', 'date'])
             for row in results:
                 csv_out.writerow(row)
-
 
 asyncio.run(main())
