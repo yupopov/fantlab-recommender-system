@@ -5,14 +5,12 @@ import json
 import re
 import csv
 from itertools import chain
-from zipfile import ZipFile
+from time import sleep
+from random import uniform
 
 # from tqdm.auto import tqdm
-import numpy as np
 from tqdm.asyncio import tqdm_asyncio
 import aiohttp
-from aiohttp.web import HTTPException
-from asyncio import CancelledError
 
 parser = argparse.ArgumentParser(
   description='Download work infos with ids contained in the file')
@@ -27,7 +25,7 @@ parser.add_argument(
     'work_ids',
     type=str,
     nargs='?',
-    default='data/raw/work_ids_cut.txt',
+    default='data/raw/work_ids.txt',
     help='path to work ids file',
   )
 parser.add_argument(
@@ -74,12 +72,14 @@ def get_marks_from_html(html, work_id) -> list:
     return marks
 
 async def fetch(session, work_id):
-    sleep_time = np.random.uniform(low=1, high=1.2)
+    sleep_time = uniform(1, 3)
     await asyncio.sleep(sleep_time)
     url = args.query_template.format(work_id=work_id)
     async with session.get(url, headers=USER_AGENT) as response:
         if response.status != 200:
             failed_work_ids.append(work_id)
+            # print(f'Download failed for work_id={work_id} with code {response.status}')
+            # sleep(3) # usual synchronous sleeping, pauses all tasks
             return
         result = await response.text('utf-8')
 
@@ -95,7 +95,7 @@ async def fetch_with_sem(session, work_id, sem):
 
 async def main():
     attempt_num = 1 # counting attempts to download the htmls
-    sem = asyncio.Semaphore(50)
+    sem = asyncio.Semaphore(7)
     results = []
     global work_ids # ??? without this everything breaks gracefully
     global failed_work_ids # ???? understand why this happens
@@ -113,19 +113,20 @@ async def main():
             attempt_results = list(chain.from_iterable(attempt_results)) # flattening the list
             results.extend(attempt_results)
 
+            # saving results to file
+            with gzip.open(args.work_marks, 'at') as out:
+                csv_out=csv.writer(out)
+                if attempt_num == 1:
+                    csv_out.writerow(['user_id', 'work_id', 'mark', 'date'])
+                for row in attempt_results:
+                    csv_out.writerow(row)
+            
             # trying to download failed responses again
             work_ids = failed_work_ids
             failed_work_ids = []
             attempt_num += 1
-            if work_ids:
-                await asyncio.sleep(5)
-
-        # saving results to file
-        with gzip.open(args.work_marks, 'wt') as out:
-            csv_out=csv.writer(out)
-            csv_out.writerow(['user_id', 'work_id', 'mark', 'date'])
-            for row in results:
-                csv_out.writerow(row)
+            # if work_ids:
+            #     await asyncio.sleep(5)
         
         # if marks for some works still weren't downloaded,
         # save their work ids to a separate file
@@ -133,17 +134,6 @@ async def main():
             work_ids = [str(work_id) for work_id in work_ids]
             with open(args.failed_work_ids, 'w') as f:
                 f.write('\n'.join(work_ids))
-
-# MWE for weird stuff we've seen above
-# This works just fine
-# async def hui():
-#     print(work_ids)
-
-# And this function can't see global variables
-# Because it modifies them
-# async def hui():
-#     print(work_ids)
-#     work_ids = []
 
 
 asyncio.run(main())
