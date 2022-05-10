@@ -2,10 +2,11 @@ import argparse
 import asyncio
 import gzip
 import json
+from random import uniform
 
 # from tqdm.auto import tqdm
 from tqdm.asyncio import tqdm_asyncio
-import aiohttp
+from aiohttp import ClientSession
 
 parser = argparse.ArgumentParser(
   description='Download work infos with ids contained in the file')
@@ -37,22 +38,33 @@ with open(args.work_ids, 'r') as f:
 
 
 async def fetch(session, url):
-    await asyncio.sleep(1)
+    sleep_time = uniform(2, 4)
+    await asyncio.sleep(sleep_time)
     async with session.get(url) as response:
         return await response.json()
 
 
+async def fetch_with_sem(session, url, sem):
+    async with sem:
+        return await fetch(session, url)
+
 async def main():
     urls = [args.query_template.format(work_id=work_id) for work_id in work_ids]
-    async with aiohttp.ClientSession() as session:
+    print('Downloading data from fantlab api...')
+    # limiting number of concurrent connections
+    # to be gentle with fantlab api
+    sem = asyncio.Semaphore(400) 
+    async with ClientSession() as session:
         # results = await asyncio.gather(
         #   *tqdm([fetch(session, url) for url in urls])
         # )
         results = await tqdm_asyncio.gather(
-          *[fetch(session, url) for url in urls]
+          *[fetch_with_sem(session, url, sem) for url in urls]
         )
-        with gzip.open(args.work_infos, 'wt') as f:
-            json.dump(results, f)
+    print('Saving results to file...')
+    with gzip.open(args.work_infos, 'wt') as f:
+        json.dump(results, f)
+    print('Done.')
 
 
 asyncio.run(main())
