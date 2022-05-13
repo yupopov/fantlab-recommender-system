@@ -59,6 +59,7 @@ class TitleParser:
     def parse_classificatory(self, classificatory: dict):
         # do something with total_count?
         # a numeric feature?
+        genre_infos = []
         genre_groups = classificatory.get('genre_group', [])
         for genre_group in genre_groups:
             genre_group_id = genre_group['genre_group_id']
@@ -67,6 +68,11 @@ class TitleParser:
             for genre in genres:
                 genre_label = genre.get('label') or ''
                 genre_labels.append(self.preprocess_text(genre_label, text_type='genre_label'))
+                genre_id = genre.get('genre_id', [])
+                genre_vote = genre.get('votes', [])
+                genre_weight = genre.get('percent', [])
+                genre_infos.append((genre_id, genre_vote, genre_weight))
+            self.title_features['genre_infos'] = genre_infos
             self.title_features[f'genre_group_{genre_group_id}_labels'] = ' '.join(genre_labels)
 
     def parse_awards(self, awards: dict):
