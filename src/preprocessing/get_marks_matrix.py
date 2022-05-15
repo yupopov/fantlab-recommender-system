@@ -1,9 +1,14 @@
 import json
 import os
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from scipy.sparse import csr_matrix, save_npz
+from scipy.sparse import coo_matrix, csr_matrix, save_npz
+from lightfm.data import Dataset
+
+from .mark_weights import mark_transforms_dict
+from .time_weights import transform_dates
 
 
 def print_stats(marks_df):
@@ -26,6 +31,7 @@ def filter_by_marks_count_work(marks_df, min_marks_work: int = 50):
     print_stats(marks_df)
     return marks_df
 
+
 def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     """
     Filter the dataframe, leaving only users with more than `min_marks` marks.
@@ -39,25 +45,15 @@ def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     print_stats(marks_df)
     return marks_df
 
-def get_interaction_weights(marks_df, eps_time=0.2):
-    # going with personal min and max timestamps for now
-    # using absolute timestamps is also a valid option?
-    # min_ts = marks_df.date.min()
-    # max_ts = marks_df.date.max()
-    user_min_max_ts = marks_df.groupby('user_id').date.agg(['min', 'max'])
-    marks_df = marks_df.merge(user_min_max_ts, on='user_id')
-    marks_df['time_weight'] = (marks_df['date'] - marks_df['min']) / \
-        (marks_df['max'] - marks_df['min'] + pd.Timedelta(1, 'D'))
-    marks_df['time_weight'] = (marks_df['time_weight'] + eps_time) / \
-        (1 + eps_time)
-    marks_df['time_weight'] = np.sqrt(marks_df['time_weight'])
-
-    marks_df.drop(columns=['min', 'max'], inplace=True)
-
-    return marks_df
+@dataclass
+class FMDataset:
+    train_data: coo_matrix
+    train_weights: coo_matrix
+    test_data: coo_matrix
+    dataset: Dataset
 
 
-class SparseMatrixMaker:
+class FMDatasetMaker:
     """
     A class that filters the marks table by
     - Deleting old marks
@@ -94,7 +90,9 @@ class SparseMatrixMaker:
     def make_train_test_data(self,
                             time_q: float = 0.8,
                             min_marks_user_train: int = 20,
-                            min_marks_work_test: int = 10
+                            min_marks_work_test: int = 10,
+                            marks_transform: str = 'decoupling',
+                            # time weights stuff...
                             ):
         self.filter_by_date()
         split_date = self.marks_df.date.quantile(time_q)
@@ -136,11 +134,42 @@ class SparseMatrixMaker:
         marks_df_test = filter_by_marks_count_work(marks_df_test,
                                                   min_marks_work_test)
 
-        # Now it's time to construct train and test datasets
-        # Have to see if lightfm can do that for me with Dataset class
-        users = marks_df_train.user_id.unique().tolist()
+        # Add interaction weights
+        print(f'Computing train mark weights...')
+        mark_transform = mark_transforms_dict[marks_transform]
+        marks_df_train['mark_weight'] = \
+            marks_df_train.groupby('user_id').mark.transform(mark_transform)
+        print('Computing date weights...')
+        date_transform = transform_dates # add hyperparameters here!
+        marks_df_train = transform_dates(marks_df_train)
 
-        return marks_df_train, marks_df_test
+        # The weight of an interaction is simply a product
+        # of mark weight and date weight
+        marks_df_train['weight'] = \
+            marks_df_train[['mark_weight', 'time_weight']].prod(axis=1)
+        marks_df_train.drop(columns=['mark_weight', 'time_weight'], inplace=True)
+
+        # construct train and test interaction matrices
+        print('Constructing train dataset...')
+        users = marks_df_train.user_id.unique().tolist()
+        works = np.union1d(marks_df_train.work_id.unique(), marks_df_test.work_id.unique())
+        dataset = Dataset()
+        dataset.fit(users, works)
+        train_data, train_weights = dataset.build_interactions(
+            marks_df_train[['user_id', 'work_id', 'weight']].to_numpy()
+            )
+        print('Constructing test dataset...')
+        test_data, _ = dataset.build_interactions(
+            marks_df_test[['user_id', 'work_id']].to_numpy()
+            )
+
+        fm_dataset = FMDataset(
+          train_data,
+          train_weights,
+          test_data,
+          dataset
+          )
+        return fm_dataset
 
     def make_sparse_matrix(self):
         self.filter_by_date()
