@@ -17,7 +17,7 @@ def filter_by_marks_count_work(marks_df, min_marks_work: int = 50):
     """
     Filter the dataframe, leaving only works with more than `min_marks_work` marks.
     """
-    print(f'Deleting works with less than {min_marks_work} marks...')
+    # print(f'Deleting works with less than {min_marks_work} marks...')
     marks_count_by_work = marks_df.groupby('work_id').mark.count()
     works_with_enough_marks = marks_count_by_work.loc[lambda n_marks: n_marks >= min_marks_work].index.tolist()
     marks_df = marks_df.query('work_id in @works_with_enough_marks')
@@ -30,7 +30,7 @@ def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     """
     Filter the dataframe, leaving only users with more than `min_marks` marks.
     """
-    print(f'Deleting users with less than {min_marks_user} marks...')
+    # print(f'Deleting users with less than {min_marks_user} marks...')
     marks_count_by_user = marks_df.groupby('user_id').mark.count()
     users_with_enough_marks = marks_count_by_user.loc[lambda n_marks: n_marks >= min_marks_user].index.tolist()
     marks_df = marks_df.query('user_id in @users_with_enough_marks')
@@ -38,6 +38,24 @@ def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     print(f'Stats after filtering:')
     print_stats(marks_df)
     return marks_df
+
+def get_interaction_weights(marks_df, eps_time=0.2):
+    # going with personal min and max timestamps for now
+    # using absolute timestamps is also a valid option?
+    # min_ts = marks_df.date.min()
+    # max_ts = marks_df.date.max()
+    user_min_max_ts = marks_df.groupby('user_id').date.agg(['min', 'max'])
+    marks_df = marks_df.merge(user_min_max_ts, on='user_id')
+    marks_df['time_weight'] = (marks_df['date'] - marks_df['min']) / \
+        (marks_df['max'] - marks_df['min'] + pd.Timedelta(1, 'D'))
+    marks_df['time_weight'] = (marks_df['time_weight'] + eps_time) / \
+        (1 + eps_time)
+    marks_df['time_weight'] = np.sqrt(marks_df['time_weight'])
+
+    marks_df.drop(columns=['min', 'max'], inplace=True)
+
+    return marks_df
+
 
 class SparseMatrixMaker:
     """
@@ -82,7 +100,7 @@ class SparseMatrixMaker:
         split_date = self.marks_df.date.quantile(time_q)
         print(f'Splitting the marks by {split_date}...')
         marks_df_train, marks_df_test = \
-            self.marks_df.query('date <= @split_date'), self.marks_df.query('date <= @split_date')
+            self.marks_df.query('date <= @split_date'), self.marks_df.query('date > @split_date')
         print('Train set stats:')
         print_stats(marks_df_train)
         print('Test set stats:')
@@ -113,17 +131,16 @@ class SparseMatrixMaker:
         print_stats(marks_df_test)
 
         # Works with few marks in the test set aren't likely to get recommended
-        # Works features can change that, perhaps
-        print(f'Dropping works with less than {min_marks_work_test} in the test set...')
+        # Work features can change that, perhaps
+        print(f'Dropping works with less than {min_marks_work_test} marks in the test set...')
         marks_df_test = filter_by_marks_count_work(marks_df_test,
                                                   min_marks_work_test)
 
         # Now it's time to construct train and test datasets
         # Have to see if lightfm can do that for me with Dataset class
         users = marks_df_train.user_id.unique().tolist()
-        
-        
-        
+
+        return marks_df_train, marks_df_test
 
     def make_sparse_matrix(self):
         self.filter_by_date()
