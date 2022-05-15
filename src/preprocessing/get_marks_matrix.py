@@ -1,6 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
+import gzip
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,8 @@ from lightfm.data import Dataset
 
 from .mark_weights import mark_transforms_dict
 from .time_weights import transform_dates
+from .item_features_buildup import get_tag_ids_, get_item_feature_weights, \
+    filter_by_work_id
 
 
 def print_stats(marks_df):
@@ -50,6 +53,7 @@ class FMDataset:
     train_data: coo_matrix
     train_weights: coo_matrix
     test_data: coo_matrix
+    work_features: csr_matrix
     dataset: Dataset
 
 
@@ -65,11 +69,17 @@ class FMDatasetMaker:
     def __init__(self,
                 n_last_years: int = 5,
                 min_marks_user: int = 20,
-                marks_df_path='data/raw/work_marks.csv.gz'):
+                marks_df_path='data/raw/work_marks.csv.gz',
+                item_features_path='data/raw/item_features.json.gz'):
         self.n_last_years = n_last_years
         # self.min_marks_work = min_marks_work
         # self.min_marks_user = min_marks_user
+        print('Loading marks...')
         self.marks_df = pd.read_csv(marks_df_path, parse_dates=['date'])
+        print('Loading item features...')
+        with gzip.open(item_features_path, 'rt') as f:
+            self.item_features = json.load(f)
+        print('Done.')
 
     def filter_by_date(self):
         """
@@ -149,15 +159,27 @@ class FMDatasetMaker:
             marks_df_train[['mark_weight', 'time_weight']].prod(axis=1)
         marks_df_train.drop(columns=['mark_weight', 'time_weight'], inplace=True)
 
-        # construct train and test interaction matrices
+        # Сonstruct train and test interaction matrices
         print('Constructing train dataset...')
-        users = marks_df_train.user_id.unique().tolist()
-        works = np.union1d(marks_df_train.work_id.unique(), marks_df_test.work_id.unique())
+        user_ids = marks_df_train.user_id.unique().tolist()
+        work_ids = np.union1d(marks_df_train.work_id.unique(), marks_df_test.work_id.unique())
+
+        # get tag ids
+        self.item_features = filter_by_work_id(self.item_features, work_ids)
+        tag_ids = get_tag_ids_(self.item_features)
+
         dataset = Dataset()
-        dataset.fit(users, works)
+        dataset.fit(user_ids, work_ids, item_features=tag_ids)
         train_data, train_weights = dataset.build_interactions(
             marks_df_train[['user_id', 'work_id', 'weight']].to_numpy()
             )
+        # Constructing item features from tags
+        # add hyperparameters in config
+        print('Adding item features...')
+        item_feature_weights = get_item_feature_weights(self.item_features)
+        work_features = dataset.build_item_features(
+          item_feature_weights, normalize=False
+          )
         print('Constructing test dataset...')
         test_data, _ = dataset.build_interactions(
             marks_df_test[['user_id', 'work_id']].to_numpy()
@@ -167,6 +189,7 @@ class FMDatasetMaker:
           train_data,
           train_weights,
           test_data,
+          work_features,
           dataset
           )
         return fm_dataset
