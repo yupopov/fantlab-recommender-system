@@ -79,14 +79,35 @@ def my_precision_at_k(model, test_interactions, train_interactions=None,
             batch_predicts = np.where(
               ~batch_train_interactions, batch_predicts, -np.Inf
               )
-        batch_top_k_predictions = np.argsort(-batch_predicts, axis=1)[:, :k]
+        # batch_top_k_predictions = np.argsort(-batch_predicts, axis=1)[:, :k]
+        # batch_top_k_pred_indices = np.argsort(-batch_predicts, axis=1)[:, :k]
+        # batch_top_k_pred_indices = np.argpartition(-batch_predicts, range(k), axis=1)[:, :k]
+        # get the indices of top k predicted items for each user in batch
+        # (yeah, i know, looks like mumbo-jumbo, but it's the fastest way,
+        # see https://stackoverflow.com/questions/42184499/cannot-understand-numpy-argpartition-output/42186357#42186357)
+        batch_top_k_pred_indices_unsorted = np.argpartition(-batch_predicts, k, axis=1)[:, :k]
+        batch_predicts_top_k_unsorted = np.take_along_axis(
+            batch_predicts, batch_top_k_pred_indices_unsorted, axis=1
+            )
+        batch_top_k_pred_indices = np.take_along_axis(
+            batch_top_k_pred_indices_unsorted,
+            np.argsort(batch_predicts_top_k_unsorted), axis=1
+        )
         batch_test_interactions = test_interactions_csr[user_batch].toarray()
+        batch_test_interactions_sorted = np.take_along_axis(
+            batch_test_interactions, batch_top_k_pred_indices, axis=1
+        )
 
-        for test_interactions, top_k_predictions in \
-            zip(batch_test_interactions, batch_top_k_predictions):
-            user_test_interactions = test_interactions.nonzero()[0]
-            user_precision = precision(user_test_interactions, top_k_predictions)
-            precisions.append(user_precision)
+        batch_precisions = batch_test_interactions_sorted.sum(axis=1) / k
+        precisions.extend(batch_precisions.tolist())
+
+        # return batch_pred_ranks, batch_test_interactions
+
+        # for test_interactions, top_k_predictions in \
+        #     zip(batch_test_interactions, batch_top_k_predictions):
+        #     user_test_interactions = test_interactions.nonzero()[0]
+        #     user_precision = precision(user_test_interactions, top_k_predictions)
+        #     precisions.append(user_precision)
     
     precisions = np.array(precisions)
     return precisions
