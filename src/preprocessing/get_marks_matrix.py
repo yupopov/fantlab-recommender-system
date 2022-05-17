@@ -102,6 +102,7 @@ class FMDatasetMaker:
                             min_marks_user_train: int = 20,
                             min_marks_work_test: int = 10,
                             marks_transform: str = 'decoupling',
+                            time_weights_params: dict={},
                             # time weights stuff...
                             ):
         self.filter_by_date()
@@ -151,7 +152,7 @@ class FMDatasetMaker:
             marks_df_train.groupby('user_id').mark.transform(mark_transform)
         print('Computing date weights...')
         date_transform = transform_dates # add hyperparameters here!
-        marks_df_train = transform_dates(marks_df_train)
+        marks_df_train = transform_dates(marks_df_train, **time_weights_params)
 
         # The weight of an interaction is simply a product
         # of mark weight and date weight
