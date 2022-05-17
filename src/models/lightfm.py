@@ -10,7 +10,7 @@ def precision(true: np.array, predicted: np.array):
 def recall(true: np.array, predicted: np.array):
     return len(np.intersect1d(true, predicted)) / len(true)
 
-
+'''
 def precision_at_k(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, num_threads=2):
     test_interactions_csr = test_interactions.tocsr()
@@ -45,9 +45,9 @@ def precision_at_k(model, test_interactions, train_interactions=None,
     
     precisions = np.array(precisions)
     return precisions
+'''
 
-
-def precision_at_k(model, test_interactions, train_interactions=None,
+def my_precision_at_k(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, batch_size=50, num_threads=2):
     test_interactions_csr = test_interactions.tocsr()
     if train_interactions is not None:
@@ -67,7 +67,11 @@ def precision_at_k(model, test_interactions, train_interactions=None,
         user_ids_batch = np.repeat(user_batch, repeats=num_items)
         item_ids_batch = np.repeat(
             item_ids.reshape(-1, 1),repeats=batch_len, axis=1).T.flatten()
-        batch_predicts = model.predict(user_ids_batch, item_ids_batch)
+        batch_predicts = model.predict(
+            user_ids_batch, item_ids_batch,
+            user_features=user_features, item_features=item_features,
+            num_threads=num_threads
+            )
         batch_predicts = batch_predicts.reshape(batch_len, num_items)
         if train_interactions is not None:
             batch_train_interactions = train_interactions_csr[user_batch].\
@@ -75,8 +79,7 @@ def precision_at_k(model, test_interactions, train_interactions=None,
             batch_predicts = np.where(
               ~batch_train_interactions, batch_predicts, -np.Inf
               )
-        batch_top_k_predictions = np.argsort(batch_predicts, axis=1)[-1:-k+1:-1]
-
+        batch_top_k_predictions = np.argsort(-batch_predicts, axis=1)[:, :k]
         batch_test_interactions = test_interactions_csr[user_batch].toarray()
 
         for test_interactions, top_k_predictions in \
@@ -89,19 +92,19 @@ def precision_at_k(model, test_interactions, train_interactions=None,
     return precisions
 
     
-def fit_lightfm(model, fm_dataset, fit_params: dict = {}):
+def fit_lightfm(model, fm_dataset, fit_params: dict = {}, precision_params: dict={}):
     model.fit(interactions=fm_dataset.train_data,
               item_features=fm_dataset.work_features,
               sample_weight=fm_dataset.train_weights,
               **fit_params)
     
-    train_precision = precision_at_k(model, fm_dataset.train_data,
+    train_precision = my_precision_at_k(model, fm_dataset.train_data,
                                      item_features=fm_dataset.work_features,
                                      k=10).mean()
-    test_precision = precision_at_k(model, fm_dataset.test_data,
+    test_precision = my_precision_at_k(model, fm_dataset.test_data,
                                     train_interactions=fm_dataset.train_data,
-                                    item_features=fm_dataset.work_features,
-                                    k=10).mean()
+                                    item_features=fm_dataset.work_features, 
+                                    **precision_params).mean()
 
     print(f'Train precision: {train_precision:.4f}')
     print(f'Test precision: {test_precision:.4f}')
