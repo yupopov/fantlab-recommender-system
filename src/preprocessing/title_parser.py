@@ -17,9 +17,15 @@ morph_analyzer = MorphAnalyzer()
 
 
 class TitleParser:
-    def __init__(self, tokenize_fn=word_tokenize, morph_analyzer=morph_analyzer):
+    def __init__(self,
+                tokenize_fn=word_tokenize,
+                morph_analyzer=morph_analyzer,
+                normalize_description=True,
+                max_text_len=120):
         self.tokenize_fn = word_tokenize
         self.morph = morph_analyzer
+        self.normalize_description = normalize_description
+        self.max_text_len = max_text_len
 
     def preprocess_text(self, text: str, text_type: str, normalize_words=True) -> str:
         """
@@ -54,7 +60,7 @@ class TitleParser:
         #     tokens = [word for word in tokens if word not in stopwords_rus]
         # else:
         #     tokens = [word for word in self.tokenize_fn(text) if word not in stopwords_rus]
-        return join_symbol.join(tokens)
+        return join_symbol.join(tokens[:self.max_text_len])
 
     def parse_classificatory(self, classificatory: dict):
         # do something with total_count?
@@ -91,10 +97,16 @@ class TitleParser:
         self.title_features['work_id'] = title_info['work_id']
         self.title_features['work_name'] = title_info['work_name']
 
+        work_description = title_info.get('work_description') or ''  # work description
+        self.title_features['work_description'] = \
+            self.preprocess_text(
+              work_description,
+              text_type='work_info',
+              normalize_words=self.normalize_description
+              )
         # preprocess and record work info
         for work_property in (
                 'work_name_bonus',  # work name bonus, perhaps useless
-                'work_description',  # work description
                 'work_notes'  # work notes, probably unavailable for most of the works and useless, but still
         ):
             work_property_ = title_info.get(work_property) or ''
