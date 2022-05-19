@@ -85,15 +85,29 @@ def my_precision_at_k(model, test_interactions, train_interactions=None,
         # get the indices of top k predicted items for each user in batch
         # (yeah, i know, looks like mumbo-jumbo, but it's the fastest way,
         # see https://stackoverflow.com/questions/42184499/cannot-understand-numpy-argpartition-output/42186357#42186357)
+        # permute the indices so that k top predictions for each user
+        # are in the first k positions (but unsorted themselves)
+        # and all other indices
         batch_top_k_pred_indices_unsorted = np.argpartition(-batch_predicts, k, axis=1)[:, :k]
+        # apply the permutation to predictions row-by-row
+        # so that we have top k predicted values for each user
+        # (still unsorted)
+        # actually, this alone is enough if you want to compute 
+        # precision or recall, because they don't care about
+        # the order of top k predicted items, but we hope 
+        # to calculate average precision@k in that manner as well sometimes
         batch_predicts_top_k_unsorted = np.take_along_axis(
             batch_predicts, batch_top_k_pred_indices_unsorted, axis=1
             )
+        # now sort the remaining k predicted values
+        # and sort top k indices again
         batch_top_k_pred_indices = np.take_along_axis(
             batch_top_k_pred_indices_unsorted,
             np.argsort(batch_predicts_top_k_unsorted), axis=1
         )
         batch_test_interactions = test_interactions_csr[user_batch].toarray()
+        # sort the test interactions so that the items with indices
+        # of top k predicted elements for each user appear first
         batch_test_interactions_sorted = np.take_along_axis(
             batch_test_interactions, batch_top_k_pred_indices, axis=1
         )
@@ -113,22 +127,25 @@ def my_precision_at_k(model, test_interactions, train_interactions=None,
     return precisions
 
     
-def fit_lightfm(model, fm_dataset, fit_params: dict = {}, precision_params: dict={}):
+def fit_lightfm(model, fm_dataset, use_item_features=True,
+    fit_params: dict = {}, precision_params: dict={}):
+
+    item_features = fm_dataset.work_features if use_item_features else None
+
     model.fit(interactions=fm_dataset.train_data,
-              item_features=fm_dataset.work_features,
+              item_features=item_features,
               sample_weight=fm_dataset.train_weights,
               **fit_params)
     
     train_precision = my_precision_at_k(model, fm_dataset.train_data,
-                                     item_features=fm_dataset.work_features,
+                                     item_features=item_features,
                                      k=10).mean()
     test_precision = my_precision_at_k(model, fm_dataset.test_data,
                                     train_interactions=fm_dataset.train_data,
-                                    item_features=fm_dataset.work_features, 
+                                    item_features=item_features, 
                                     **precision_params).mean()
 
     print(f'Train precision: {train_precision:.4f}')
     print(f'Test precision: {test_precision:.4f}')
 
     return model
-    
