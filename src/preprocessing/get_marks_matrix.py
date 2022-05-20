@@ -193,6 +193,7 @@ class FMDatasetMaker:
           work_features,
           dataset
           )
+        print('Done.')
         return fm_dataset
 
     def make_sparse_matrix(self):
