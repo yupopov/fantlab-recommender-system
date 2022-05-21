@@ -70,15 +70,18 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
         user_batch = user_ids[batch_start: batch_start + batch_size]
         batch_len = len(user_batch)
 
-        user_ids_batch = np.repeat(user_batch, repeats=num_items)
-        item_ids_batch = np.repeat(
-            item_ids.reshape(-1, 1),repeats=batch_len, axis=1).T.flatten()
-        batch_predicts = model.predict(
-            user_ids_batch, item_ids_batch,
-            user_features=user_features, item_features=item_features,
-            num_threads=num_threads
-            )
-        batch_predicts = batch_predicts.reshape(batch_len, num_items)
+        if model.__class__.__name__ == 'LightFM':
+            user_ids_batch = np.repeat(user_batch, repeats=num_items)
+            item_ids_batch = np.repeat(
+                item_ids.reshape(-1, 1),repeats=batch_len, axis=1).T.flatten()
+            batch_predicts = model.predict(
+                user_ids_batch, item_ids_batch,
+                user_features=user_features, item_features=item_features,
+                num_threads=num_threads
+                ).reshape(batch_len, num_items)
+        elif model.__class__.__name__ == 'LinearRecommender':
+            batch_predicts = model.predict(user_batch).toarray()
+            # print(batch_predicts.shape)
         if train_interactions is not None:
             batch_train_interactions = train_interactions_csr[user_batch].\
                 toarray().astype(bool)
@@ -94,6 +97,7 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
         # permute the indices so that k top predictions for each user
         # are in the first k positions (but unsorted themselves)
         # and all other indices
+        # print(type(batch_predicts))
         batch_top_k_pred_indices_unsorted = np.argpartition(-batch_predicts, k, axis=1)[:, :k]
         # apply the permutation to predictions row-by-row
         # so that we have top k predicted values for each user
