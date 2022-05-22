@@ -5,6 +5,7 @@ import gzip
 
 import numpy as np
 import pandas as pd
+import torch
 from scipy.sparse import coo_matrix, csr_matrix, save_npz
 from lightfm.data import Dataset
 
@@ -47,6 +48,14 @@ def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     print(f'Stats after filtering:')
     print_stats(marks_df)
     return marks_df
+
+def make_seqs(user_items: list):
+    seqs = []
+    for i in range(0, len(user_items), 20):
+        seq_end = len(user_items) - i
+        seq_start = max(seq_end - 20, 0)
+        seqs.append(user_items[seq_start: seq_end])
+    return seqs
 
 @dataclass
 class FMDataset:
@@ -127,7 +136,7 @@ class FMDatasetMaker:
 
         # Users with few marks in the train set aren't likely to get good predictions
         # User features can change it though
-        print(f'Dropping users with less that {min_marks_user_train} marks in the train set...')
+        print(f'Dropping users with less than {min_marks_user_train} marks in the train set...')
         marks_df_train = filter_by_marks_count_user(marks_df_train,
                                                     min_marks_user_train)
                                                   
@@ -223,6 +232,119 @@ class FMDatasetMaker:
 
         save_npz('data/interim/marks.npz', marks_matrix)
         print('Done.')
+
+
+class RNNDataset:
+    def __init__(
+      self,
+      n_last_years=10,
+      time_q=0.9,
+      marks_df_path='data/raw/work_marks.csv.gz',
+      embs_path='data/interim/bert_embeddings.pt',
+      item2emb_ix_path='data/interim/key2index.json.gz',
+      min_marks_work_train=50,
+      min_marks_work_test=10,
+      min_marks_user_train=10
+    ):
+        self.n_last_years = n_last_years
+        self.time_q = time_q
+        self.min_marks_work_train = min_marks_work_train
+        self.min_marks_work_test = min_marks_work_test
+        self.min_marks_user_train = min_marks_user_train
+        print('Loading marks...')
+        self.marks_df = pd.read_csv(marks_df_path, parse_dates=['date'])
+        print('Loading embeddings...')
+        self.item_embs = torch.load(embs_path)
+        with gzip.open(item2emb_ix_path, 'rt') as f:
+            item2emb_ix = json.load(f)
+        self.item2emb_ix = {int(key): value for key, value in item2emb_ix.items()}
+        print('Done.')
+
+    def filter_by_date(self):
+        """
+        Filter the dataframe, leaving only marks from n last years.
+        """
+        print('Stats before filtering by date:')
+        print_stats(self.marks_df)
+
+        date_thresh = pd.Timestamp.today().date() - \
+            pd.tseries.offsets.YearBegin() - \
+            pd.DateOffset(years=self.n_last_years)
+        print(f'Deleting marks dated before {date_thresh.year}...')
+        self.marks_df = self.marks_df.query('date >= @date_thresh')
+
+        print(f'Stats after filtering by date:')
+        print_stats(self.marks_df)
+
+    def get_rnn_dataset(self):
+        self.filter_by_date()
+        split_date = self.marks_df.date.quantile(self.time_q)
+        print(f'Splitting the marks by {split_date}...')
+        marks_df_train, marks_df_test = \
+            self.marks_df.query('date <= @split_date'), self.marks_df.query('date > @split_date')
+        print('Train set stats:')
+        print_stats(marks_df_train)
+        print('Test set stats:')
+        print_stats(marks_df_test)
+
+        # Drop works with few marks from train dataset
+        print(f'Dropping works with less than {self.min_marks_work_train} marks in the train set...')
+        works_train = marks_df_train.work_id.value_counts().\
+            loc[lambda x: x >= self.min_marks_work_train].index.tolist()
+        marks_df_train = marks_df_train.query('work_id in @works_train')
+        print('Train set stats:')
+        print_stats(marks_df_train)
+        print(f'Dropping works with less than {self.min_marks_work_test} marks in the test set...')
+        works_test = marks_df_test.work_id.value_counts().\
+            loc[lambda x: x >= self.min_marks_work_test].index.tolist()
+        marks_df_test = marks_df_test.query('work_id in @works_test')
+        print('Test set stats:')
+        print_stats(marks_df_test)
+        
+        # Dropping works present only in the test or in the train set
+        works_joint = np.intersect1d(works_train, works_test)
+        print('Dropping works with interactions only in the train or the test set...')
+        marks_df_train = marks_df_train.query('work_id in @works_joint')
+        marks_df_test = marks_df_test.query('work_id in @works_joint')
+        print('Train set stats:')
+        print_stats(marks_df_train)
+        print('Test set stats:')
+        print_stats(marks_df_test)
+        print(f'Dropping users with less than {self.min_marks_user_train} marks in the train set...')
+        marks_df_train = filter_by_marks_count_user(marks_df_train,
+                                                    self.min_marks_user_train)
+                                                  
+        # Drop users with marks only in the test period
+        print('Dropping users from the test set with no marks in the train set...')
+        users_train = marks_df_train.user_id.unique()
+        marks_df_test = marks_df_test.query('user_id in @users_train')
+        print('Stats after filtering:')
+        print_stats(marks_df_test)
+
+        print('Constructing train dataset...')
+        user_ids = marks_df_train.user_id.unique().tolist()
+        work_ids = np.union1d(marks_df_train.work_id.unique(), marks_df_test.work_id.unique())
+
+        dataset = Dataset()
+        dataset.fit(user_ids, work_ids)
+        print('Constructing test dataset...')
+        test_data, _ = dataset.build_interactions(
+            marks_df_test[['user_id', 'work_id']].to_numpy()
+            )
+        self.item2fm_ix = dataset.mapping()[2]
+        fm_ix2item = {value: key for key, value in self.item2fm_ix.items()} # fm_dataset row num: item_id
+        fm_ix2emb_ix = {key: self.item2emb_ix[value] for key, value in fm_ix2item.items()} # fm_dataset row num: emb row num
+        emb_ix2fm_ix = {value: key for key, value in fm_ix2emb_ix.items()} # emb row num: fm_dataset row num
+        emb_ix2fm_ix = {key: value for key, value in sorted(emb_ix2fm_ix.items(), key=lambda x: x[1])}
+        emb_ix_perm = list(emb_ix2fm_ix.keys())
+        self.item_embs = self.item_embs[emb_ix_perm] # item_embs: (n_train_items, n_item_features)
+        self.item2fm_ix['<PAD>'] = len(self.item2fm_ix)
+        self.item_embs = torch.cat((self.item_embs, torch.zeros(self.item_embs.shape[1])))
+
+        user_seqs = marks_df_train.groupby('user_id').work_id.\
+            apply(lambda x: make_seqs(x.tolist()))
+        return marks_df_train, marks_df_test
+
 
 
 
