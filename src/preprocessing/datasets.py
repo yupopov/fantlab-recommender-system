@@ -200,9 +200,9 @@ class FMDatasetMaker:
 
         # Works with few marks in the test set aren't likely to get recommended
         # Work features can change that, perhaps
-        print(f'Dropping works with less than {min_marks_work_test} marks in the test set...')
+        print(f'Dropping works with less than {min_marks_work} marks in the test set...')
         marks_df_test = filter_by_marks_count_work(marks_df_test,
-                                                  min_marks_work_test)
+                                                  min_marks_work)
 
         # Add interaction weights
         print(f'Computing train mark weights...')
