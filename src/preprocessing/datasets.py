@@ -311,11 +311,9 @@ class RNNDatasetMaker:
         self.marks_df = pd.read_csv(marks_df_path, parse_dates=['date'])
         print('Loading embeddings...')
         self.item_embs = torch.load(embs_path)
-        print(self.item_embs.shape)
         with gzip.open(item2emb_ix_path, 'rt') as f:
             item2emb_ix = json.load(f)
         self.item2emb_ix = {int(key): value for key, value in item2emb_ix.items()}
-        print(len(self.item2emb_ix))
         print('Done.')
 
     def filter_by_date(self):
@@ -335,7 +333,6 @@ class RNNDatasetMaker:
         print_stats(self.marks_df)
 
     def get_rnn_dataset(self):
-        print(self.item_embs.shape)
         self.filter_by_date()
         split_date = self.marks_df.date.quantile(self.time_q)
         print(f'Splitting the marks by {split_date}...')
@@ -397,17 +394,11 @@ class RNNDatasetMaker:
         # items in our dataset, and get them in the same order as in test data
         # we need: emb row num: fm_dataset col num
         fm_ix2item = {value: key for key, value in item2fm_ix.items()} # fm_dataset col num: item_id
-        print(self.item_embs.shape)
-        print(len(fm_ix2item))
         fm_ix2emb_ix = {key: self.item2emb_ix[value] for key, value in fm_ix2item.items()} # fm_dataset col num: emb row num
         emb_ix2fm_ix = {value: key for key, value in fm_ix2emb_ix.items()} # emb row num: fm_dataset col num
-        print(len(emb_ix2fm_ix))
         # sort just in case
         emb_ix2fm_ix = {key: value for key, value in sorted(emb_ix2fm_ix.items(), key=lambda x: x[1])}
-        print(len(emb_ix2fm_ix))
         emb_ix_perm = list(emb_ix2fm_ix.keys())
-        print(self.item_embs.shape)
-        print(len(emb_ix_perm))
         self.item_embs = self.item_embs[emb_ix_perm] # item_embs: (n_train_items, n_item_features)
         # Add padding as the last embedding element
         item2fm_ix['<PAD>'] = len(item2fm_ix)
