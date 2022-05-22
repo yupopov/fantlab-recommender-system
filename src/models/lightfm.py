@@ -2,6 +2,7 @@ import numpy as np
 
 from tqdm.auto import tqdm
 # from lightfm.evaluation import precision_at_k
+from src.models import get_top_k_predictions_with_labels
 
 def precision(true: np.array, predicted: np.array):
     return len(np.intersect1d(true, predicted)) / len(predicted)
@@ -11,6 +12,9 @@ def recall(true: np.array, predicted: np.array):
     return len(np.intersect1d(true, predicted)) / len(true)
 
 '''
+This is test handmade precision_at_k function.
+It is not used in the model fitting
+
 def precision_at_k(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, num_threads=2):
     test_interactions_csr = test_interactions.tocsr()
@@ -48,6 +52,8 @@ def precision_at_k(model, test_interactions, train_interactions=None,
 '''
 
 '''
+Moved to the separate module. Saved here as a working copy just in case.
+
 def get_top_k_predictions_with_labels(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, batch_size=50, num_threads=2):
     """
@@ -142,8 +148,14 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
     return top_k_predictions, labels
 '''
 
+
 def my_precision_at_k(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, batch_size=50, num_threads=2):
+
+    '''
+    Calculates and returns precision@k metric faster than the LightFM's builtin
+    '''
+
     test_interactions_csr = test_interactions.tocsr()
     if train_interactions is not None:
         train_interactions_csr = train_interactions.tocsr()
@@ -221,7 +233,8 @@ def my_precision_at_k(model, test_interactions, train_interactions=None,
     precisions = np.array(precisions)
     return precisions
 
-    
+
+# fit function
 def fit_lightfm(model, fm_dataset, use_item_features=True,
     fit_params: dict = {}, precision_params: dict={}):
 
