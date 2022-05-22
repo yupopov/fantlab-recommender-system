@@ -2,7 +2,7 @@ import numpy as np
 
 from tqdm.auto import tqdm
 # from lightfm.evaluation import precision_at_k
-from src.models import get_top_k_predictions_with_label
+from src.models.get_top_k_predictions_with_label import get_top_k_predictions_with_labels
 
 def precision(true: np.array, predicted: np.array):
     return len(np.intersect1d(true, predicted)) / len(predicted)
