@@ -160,7 +160,7 @@ class FMDatasetMaker:
     def make_train_test_data(self,
                             time_q: float = 0.8,
                             min_marks_user_train: int = 20,
-                            min_marks_work_test: int = 10,
+                            min_marks_work: int = 10,
                             marks_transform: str = 'decoupling',
                             time_weights_params: dict={},
                             # time weights stuff...
