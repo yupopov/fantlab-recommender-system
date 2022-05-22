@@ -8,6 +8,10 @@ from random import uniform
 from tqdm.asyncio import tqdm_asyncio
 from aiohttp import ClientSession
 
+'''
+This function asynchronously downloads work_infos form Fantlab API
+'''
+
 parser = argparse.ArgumentParser(
   description='Download work infos with ids contained in the file')
 parser.add_argument(

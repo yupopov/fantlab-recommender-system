@@ -8,6 +8,11 @@ from itertools import chain
 from time import sleep
 from random import uniform
 
+'''
+This function downloads the marks for all the downloaded works
+using the html code obtained by html_extraction.py
+'''
+
 # from tqdm.auto import tqdm
 from tqdm.asyncio import tqdm_asyncio
 import aiohttp
@@ -48,19 +53,17 @@ with open(args.work_ids, 'r') as f:
   work_ids = f.read().split('\n')
 failed_work_ids = []
 
+# USER_AGENT is needed to increase the acceptable frequency of requests
 USER_AGENT = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36 OPR/72.0.3815.465 (Edition Yx GX)',
 }
 
+
 def get_marks_from_html(html, work_id) -> list:
     marks_strs = html[html.find('marks = []'): html.find('</script><br><br><b>') - 1].split('\n')
-    # mark_dicts = [
-    #   {
-    #     'user_id': int(re.search(pattern=r'\.userid=\d+', string=marks_str).group(0).split('=')[-1]),
-    #     'mark': int(re.search(pattern=r'\.mark=\d{1,2}', string=marks_str).group(0).split('=')[-1]),
-    #     'date': re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-1],
-    #     'work_id': work_id
-    #   } for marks_str in marks_strs]
+
+    # Some weird regular expressions to parse html 
+    # and obtain marks information foe every work
     marks = tuple((
         int(re.search(pattern=r'\.userid=\d+', string=marks_str).group(0).split('=')[-1]),
         work_id,
@@ -68,26 +71,31 @@ def get_marks_from_html(html, work_id) -> list:
         re.search(pattern=r'\.date=".*?"', string=marks_str).group(0)[7:-10],
     ) for marks_str in marks_strs)
 
-    # return mark_dicts
     return marks
 
+
+# asynchronous request function
 async def fetch(session, work_id):
     sleep_time = uniform(1, 3)
     await asyncio.sleep(sleep_time)
     url = args.query_template.format(work_id=work_id)
     async with session.get(url, headers=USER_AGENT) as response:
         if response.status != 200:
-            failed_work_ids.append(work_id)
+            failed_work_ids.append(work_id) # we collect undownloaded work_ids
+                                            # to download them in next iteration
+                                            # if we fail it 10 times, we do not
+                                            # download it at all
+
+
             # print(f'Download failed for work_id={work_id} with code {response.status}')
             # sleep(3) # usual synchronous sleeping, pauses all tasks
             return
         result = await response.text('utf-8')
 
         mark_dicts = get_marks_from_html(result, work_id)
-        # print(mark_dicts)
         return mark_dicts
 
-
+# using asyncio.Semaphore to be gentle with the site
 async def fetch_with_sem(session, work_id, sem):
     async with sem:
         return await fetch(session, work_id)
@@ -97,8 +105,8 @@ async def main():
     attempt_num = 1 # counting attempts to download the htmls
     sem = asyncio.Semaphore(7)
     results = []
-    global work_ids # ??? without this everything breaks gracefully
-    global failed_work_ids # ???? understand why this happens
+    global work_ids 
+    global failed_work_ids 
     async with aiohttp.ClientSession() as session:
         while work_ids and attempt_num < 10:
             print(f'Starting attempt {attempt_num}...')

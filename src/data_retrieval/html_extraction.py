@@ -1,6 +1,9 @@
 import re
 import os
 
+# fetch work_ids from downloaded html 
+# with some regular expressions
+
 def get_work_ids(data_dir='data/raw', out_file='work_ids.txt'):
     
     html_files = [os.path.join(data_dir, file_) for file_ in os.listdir(data_dir) if file_.endswith('.html')]
