@@ -5,9 +5,12 @@ import gzip
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 import torch
+from torch.nn.utils.rnn import pack_sequence
 from scipy.sparse import coo_matrix, csr_matrix, save_npz
 from lightfm.data import Dataset
+# from .packed_sequence_dataset import PackedSequenceDataset
 
 from .mark_weights import mark_transforms_dict
 from .time_weights import transform_dates
@@ -49,13 +52,48 @@ def filter_by_marks_count_user(marks_df, min_marks_user: int = 20):
     print_stats(marks_df)
     return marks_df
 
-def make_seqs(user_items: list):
+
+def make_seqs(user_items: list, max_seq_len: int = 20):
     seqs = []
-    for i in range(0, len(user_items), 20):
+    for i in range(0, len(user_items), max_seq_len):
         seq_end = len(user_items) - i
-        seq_start = max(seq_end - 20, 0)
+        seq_start = max(seq_end - max_seq_len, 0)
         seqs.append(user_items[seq_start: seq_end])
     return seqs
+
+
+class PackedSequenceDataset(torch.utils.data.Dataset):
+    def __init__(self, seqs: list, vocab: dict, max_seq_len=20):
+        """
+        A Dataset for the task
+        :param seqs: sequences from a train/val/test split
+        :param vocab: dict
+        """
+        self.seqs = seqs
+        self.vocab = vocab
+        self.padding_ix = self.vocab['<PAD>']
+        self.max_seq_len = max_seq_len
+
+    def __len__(self):
+        return len(self.seqs)
+
+    def __getitem__(self, index):
+        item = [self.vocab[item] for item in self.seqs[index]]
+        # cut the text
+        item = item[:self.max_seq_len]
+        # pad FROM THE LEFT
+        item = [self.padding_ix] * max(self.max_seq_len - len(item), 0) + item 
+        item, label = item[:-1], item[1:]
+        return item, label
+            
+    def collate_fn(self, batch):
+        """
+        Technical method to form a batch to feed into recurrent network
+        """
+        items = pack_sequence([torch.tensor(pair[0]) for pair in batch], enforce_sorted=False)
+        labels = pack_sequence([torch.tensor(pair[1]) for pair in batch], enforce_sorted=False)
+        return items, labels
+
 
 @dataclass
 class FMDataset:
@@ -65,6 +103,19 @@ class FMDataset:
     work_features: csr_matrix
     dataset: Dataset
 
+
+@dataclass
+class RNNDataset:
+    train_data: list
+    train_dataset: PackedSequenceDataset
+    train_data_for_pred: pd.Series
+    val_data: list
+    val_dataset: PackedSequenceDataset
+    test_data: coo_matrix
+    item_vocab: dict
+    user_vocab: dict
+    embs: torch.Tensor
+    
 
 class FMDatasetMaker:
     """
@@ -124,7 +175,6 @@ class FMDatasetMaker:
         print('Test set stats:')
         print_stats(marks_df_test)
 
-        
         # If we drop the marks which are present only in the train
         # or the test set, the model loses the ability to recommend new works
         # (ones that appeared during test period)
@@ -234,7 +284,7 @@ class FMDatasetMaker:
         print('Done.')
 
 
-class RNNDataset:
+class RNNDatasetMaker:
     def __init__(
       self,
       n_last_years=10,
@@ -244,20 +294,28 @@ class RNNDataset:
       item2emb_ix_path='data/interim/key2index.json.gz',
       min_marks_work_train=50,
       min_marks_work_test=10,
-      min_marks_user_train=10
+      min_marks_user_train=10,
+      max_seq_len=20,
+      valid_size=0.1,
+      random_state=17
     ):
         self.n_last_years = n_last_years
         self.time_q = time_q
         self.min_marks_work_train = min_marks_work_train
         self.min_marks_work_test = min_marks_work_test
         self.min_marks_user_train = min_marks_user_train
+        self.max_seq_len = max_seq_len
+        self.valid_size=valid_size
+        self.random_state=random_state
         print('Loading marks...')
         self.marks_df = pd.read_csv(marks_df_path, parse_dates=['date'])
         print('Loading embeddings...')
         self.item_embs = torch.load(embs_path)
+        print(self.item_embs.shape)
         with gzip.open(item2emb_ix_path, 'rt') as f:
             item2emb_ix = json.load(f)
         self.item2emb_ix = {int(key): value for key, value in item2emb_ix.items()}
+        print(len(self.item2emb_ix))
         print('Done.')
 
     def filter_by_date(self):
@@ -277,6 +335,7 @@ class RNNDataset:
         print_stats(self.marks_df)
 
     def get_rnn_dataset(self):
+        print(self.item_embs.shape)
         self.filter_by_date()
         split_date = self.marks_df.date.quantile(self.time_q)
         print(f'Splitting the marks by {split_date}...')
@@ -321,31 +380,71 @@ class RNNDataset:
         print('Stats after filtering:')
         print_stats(marks_df_test)
 
-        print('Constructing train dataset...')
+        print('Constructing test dataset...')
         user_ids = marks_df_train.user_id.unique().tolist()
         work_ids = np.union1d(marks_df_train.work_id.unique(), marks_df_test.work_id.unique())
 
+        # Construct test interactions as a sparse matrix
         dataset = Dataset()
         dataset.fit(user_ids, work_ids)
-        print('Constructing test dataset...')
         test_data, _ = dataset.build_interactions(
             marks_df_test[['user_id', 'work_id']].to_numpy()
             )
-        self.item2fm_ix = dataset.mapping()[2]
-        fm_ix2item = {value: key for key, value in self.item2fm_ix.items()} # fm_dataset row num: item_id
-        fm_ix2emb_ix = {key: self.item2emb_ix[value] for key, value in fm_ix2item.items()} # fm_dataset row num: emb row num
-        emb_ix2fm_ix = {value: key for key, value in fm_ix2emb_ix.items()} # emb row num: fm_dataset row num
+        # Save user and item enumerations
+        user2fm_ix = dataset.mapping()[0]
+        item2fm_ix = dataset.mapping()[2]
+        # Leave only the embeddings corresponding to the 
+        # items in our dataset, and get them in the same order as in test data
+        # we need: emb row num: fm_dataset col num
+        fm_ix2item = {value: key for key, value in item2fm_ix.items()} # fm_dataset col num: item_id
+        print(self.item_embs.shape)
+        print(len(fm_ix2item))
+        fm_ix2emb_ix = {key: self.item2emb_ix[value] for key, value in fm_ix2item.items()} # fm_dataset col num: emb row num
+        emb_ix2fm_ix = {value: key for key, value in fm_ix2emb_ix.items()} # emb row num: fm_dataset col num
+        print(len(emb_ix2fm_ix))
+        # sort just in case
         emb_ix2fm_ix = {key: value for key, value in sorted(emb_ix2fm_ix.items(), key=lambda x: x[1])}
+        print(len(emb_ix2fm_ix))
         emb_ix_perm = list(emb_ix2fm_ix.keys())
+        print(self.item_embs.shape)
+        print(len(emb_ix_perm))
         self.item_embs = self.item_embs[emb_ix_perm] # item_embs: (n_train_items, n_item_features)
-        self.item2fm_ix['<PAD>'] = len(self.item2fm_ix)
-        self.item_embs = torch.cat((self.item_embs, torch.zeros(self.item_embs.shape[1])))
+        # Add padding as the last embedding element
+        item2fm_ix['<PAD>'] = len(item2fm_ix)
+        self.item_embs = torch.cat((self.item_embs,
+          torch.zeros(1, self.item_embs.shape[1])))
 
-        user_seqs = marks_df_train.groupby('user_id').work_id.\
-            apply(lambda x: make_seqs(x.tolist()))
-        return marks_df_train, marks_df_test
+        print('Constructing train RNN dataset...')
+        # Get sequences of item ids for each user, in chronological order
+        # and break them down into subsequences of length <= `max_seq_len`
+        marks_df_train.sort_values(by=['user_id', 'date'], inplace=True)
+        train_user_ids, val_user_ids = train_test_split(
+          user_ids, test_size=self.valid_size, random_state=self.random_state
+          )
+        user_seqs = marks_df_train.\
+            groupby('user_id').work_id.\
+            apply(lambda x: make_seqs(x.tolist(), max_seq_len=self.max_seq_len))
+        # Get the last subsequence to predict future interactions
+        user_seqs_for_pred = user_seqs.apply(lambda x: x[0])
+        # Obtain a list with all sequences of interactions
+        train_seqs = user_seqs.loc[train_user_ids].sum()
+        val_seqs = user_seqs.loc[val_user_ids].sum()
+        print(f'Total {len(train_user_ids)} users, {len(train_seqs)} sequences of length <= {self.max_seq_len} in train set.')
+        print(f'Total {len(val_user_ids)} users, {len(val_seqs)} sequences of length <= {self.max_seq_len} in valid set.')
+        
+        # Define the datasets
+        train_dataset = PackedSequenceDataset(train_seqs, item2fm_ix, self.max_seq_len)
+        val_dataset = PackedSequenceDataset(val_seqs, item2fm_ix, self.max_seq_len)
 
-
-
-
-
+        rnn_dataset = RNNDataset(
+          train_data=train_seqs,
+          train_data_for_pred=user_seqs_for_pred,
+          train_dataset=train_dataset,
+          val_data=val_seqs,
+          val_dataset=val_dataset,
+          test_data=test_data,
+          item_vocab=item2fm_ix,
+          user_vocab=user2fm_ix,
+          embs=self.item_embs,
+        )
+        return rnn_dataset
