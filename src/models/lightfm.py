@@ -47,7 +47,7 @@ def precision_at_k(model, test_interactions, train_interactions=None,
     return precisions
 '''
 
-
+'''
 def get_top_k_predictions_with_labels(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, batch_size=50, num_threads=2):
     """
@@ -140,7 +140,7 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
     top_k_predictions = np.array(top_k_predictions)
     labels = np.array(labels)
     return top_k_predictions, labels
-
+'''
 
 def my_precision_at_k(model, test_interactions, train_interactions=None,
     k=10, user_features=None, item_features=None, batch_size=50, num_threads=2):
