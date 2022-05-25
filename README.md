@@ -8,7 +8,6 @@ Here is a little repository content guide.
 ### [Data/raw](github.com/yupopov/fantlab-recommender-system/tree/main/data/raw)
 
 Data/raw folder contains: 
-- html source code files which were used to parse work ids (there is obviously smarter way to do this operation)
 - parsed work ids
 - works information file
 - work features file
@@ -23,7 +22,7 @@ This is a folder which contains all the information used during the model fittin
 ### [src/data_retrieval](github.com/yupopov/fantlab-recommender-system/tree/main/src/data_retrieval)
 
 Folder which is needed to obtain data from Fantlab public API, contains:
-- html parser to extract work ids 
+- html parser to extract work ids (yeah, they were obtained from html's of "the most" from every form section, there obviously is a smarter way to do this)
 - asynchronous downloaders of work infos and users marks
 
 ### [src/models](github.com/yupopov/fantlab-recommender-system/tree/main/src/models)
