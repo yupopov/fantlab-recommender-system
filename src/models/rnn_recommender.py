@@ -27,7 +27,8 @@ class RecurrentRecommender(Module):
                                dropout=config["cell_dropout"],
                                bidirectional=False,
                                )
-        cur_out_size = config["hidden_size"] * config["num_layers"]
+        # cur_out_size = config["hidden_size"] * config["num_layers"]
+        cur_out_size = config["hidden_size"] 
         # if config["bidirectional"]:
         #     cur_out_size *= 2
         out_layers = []
@@ -38,7 +39,7 @@ class RecurrentRecommender(Module):
         self.out_proj = Sequential(*out_layers)
 
     def forward(self, input):
-        embedded = self.embs(input.data)
+        embedded = self.embs(input)
         hidden_states, _ = self.cell(embedded)
         # if isinstance(last_state, tuple):
         #     last_state = last_state[0]

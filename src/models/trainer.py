@@ -89,6 +89,10 @@ class Trainer:
             labels = labels.to(self.device)
 
             preds = self.model.forward(texts)
+            # a dirty hack so that one can compute cross entropy,
+            # perhaps better to rewrite the model
+            # output itself so it's of the right size
+            preds = preds.permute((0, 2, 1))
             loss = self.loss_fn(preds, labels)
 
             loss.backward()
@@ -129,6 +133,7 @@ class Trainer:
                 labels = labels.to(self.device)
 
                 preds = self.model.forward(texts)
+                preds = preds.permute((0, 2, 1))
                 loss = self.loss_fn(preds, labels)
 
                 # preds_class = preds.argmax(dim=1)
