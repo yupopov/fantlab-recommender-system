@@ -1,5 +1,5 @@
 # Fantlab recommender system
-This is a project aimed at creating recommendation system for russian e-library fantlab.ru. At the moment there are some datasets, python modules to create them and [LightFM](making.lyst.com/lightfm/docs/home.html) collaborative filtration model, showing decent results. Also a content-based model will be available soon.
+This is a project aimed at creating recommendation system for russian e-library [fantlab.ru](fantlab.ru). At the moment there are some datasets, python modules to create them and [LightFM](making.lyst.com/lightfm/docs/home.html) collaborative filtration model, showing decent results. Also a content-based model will be available soon.
 
 # Repository content
 
