@@ -10,7 +10,6 @@ import torch
 from torch.nn.utils.rnn import pack_sequence
 from scipy.sparse import coo_matrix, csr_matrix, save_npz
 from lightfm.data import Dataset
-# from .packed_sequence_dataset import PackedSequenceDataset
 
 from .mark_weights import mark_transforms_dict
 from .time_weights import transform_dates
@@ -62,7 +61,7 @@ def make_seqs(user_items: list, max_seq_len: int = 20):
     return seqs
 
 
-class PackedSequenceDataset(torch.utils.data.Dataset):
+class LeftPaddedDataset(torch.utils.data.Dataset):
     def __init__(self, seqs: list, vocab: dict, max_seq_len=20):
         """
         A Dataset for the task
@@ -90,8 +89,10 @@ class PackedSequenceDataset(torch.utils.data.Dataset):
         """
         Technical method to form a batch to feed into recurrent network
         """
-        items = pack_sequence([torch.tensor(pair[0]) for pair in batch], enforce_sorted=False)
-        labels = pack_sequence([torch.tensor(pair[1]) for pair in batch], enforce_sorted=False)
+        # items = pack_sequence([torch.tensor(pair[0]) for pair in batch], enforce_sorted=False)
+        # labels = pack_sequence([torch.tensor(pair[1]) for pair in batch], enforce_sorted=False)
+        items = torch.LongTensor([pair[0] for pair in batch])
+        labels = torch.LongTensor([pair[1] for pair in batch])
         return items, labels
 
 
@@ -107,10 +108,10 @@ class FMDataset:
 @dataclass
 class RNNDataset:
     train_data: list
-    train_dataset: PackedSequenceDataset
+    train_dataset: LeftPaddedDataset
     train_data_for_pred: pd.Series
     val_data: list
-    val_dataset: PackedSequenceDataset
+    val_dataset: LeftPaddedDataset
     test_data: coo_matrix
     item_vocab: dict
     user_vocab: dict
@@ -424,8 +425,8 @@ class RNNDatasetMaker:
         print(f'Total {len(val_user_ids)} users, {len(val_seqs)} sequences of length <= {self.max_seq_len} in valid set.')
         
         # Define the datasets
-        train_dataset = PackedSequenceDataset(train_seqs, item2fm_ix, self.max_seq_len)
-        val_dataset = PackedSequenceDataset(val_seqs, item2fm_ix, self.max_seq_len)
+        train_dataset = LeftPaddedDataset(train_seqs, item2fm_ix, self.max_seq_len)
+        val_dataset = LeftPaddedDataset(val_seqs, item2fm_ix, self.max_seq_len)
 
         rnn_dataset = RNNDataset(
           train_data=train_seqs,
