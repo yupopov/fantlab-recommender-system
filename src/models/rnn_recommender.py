@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn.functional import sigmoid, relu, elu, tanh
 from torch.nn import Module, Embedding, LSTM, RNN, GRU, Linear, Sequential, Dropout, \
     CrossEntropyLoss
 import torch.nn.functional as F
@@ -27,6 +28,14 @@ class RecurrentRecommender(Module):
                                dropout=config["cell_dropout"],
                                bidirectional=False,
                                )
+        activation_types = {
+            "sigmoid": sigmoid,
+            "tanh": tanh,
+            "relu": relu,
+            "elu": elu,
+        }
+        self.out_activation = activation_types[config["out_activation"]]
+        self.out_dropout = Dropout(config["out_dropout"])
         # cur_out_size = config["hidden_size"] * config["num_layers"]
         cur_out_size = config["hidden_size"] 
         # if config["bidirectional"]:
@@ -45,6 +54,8 @@ class RecurrentRecommender(Module):
         #     last_state = last_state[0]
         # last_state = last_state.transpose(0, 1)
         # last_state = last_state.reshape(last_state.size(0), -1)
+        self.out_activation
+        self.out_dropout
         return self.out_proj(hidden_states)
         # return predicts
 

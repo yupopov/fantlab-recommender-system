@@ -65,7 +65,7 @@ class Trainer:
         # self.history = {"train_loss": [], 'train_acc': [], "val_loss": [], "val_acc": []}
         self.history = {"train_loss": [], "val_loss": []}
         for epoch in range(self.n_epochs):
-            print(f'Training epocn {epoch}')
+            print(f'Training epoch {epoch}')
             train_info = self._train_epoch(train_loader)
             val_info = self._val_epoch(val_loader)
             self.history["train_loss"].append(train_info["epoch_train_loss"])
