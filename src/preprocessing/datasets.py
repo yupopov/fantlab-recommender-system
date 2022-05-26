@@ -410,15 +410,20 @@ class RNNDatasetMaker:
         # Get sequences of item ids for each user, in chronological order
         # and break them down into subsequences of length <= `max_seq_len`
         marks_df_train.sort_values(by=['user_id', 'date'], inplace=True)
-        train_user_ids, val_user_ids = train_test_split(
-          user_ids, test_size=self.valid_size, random_state=self.random_state
-          )
         user_seqs = marks_df_train.\
             groupby('user_id').work_id.\
             apply(lambda x: make_seqs(x.tolist(), max_seq_len=self.max_seq_len))
         # Get the last subsequence to predict future interactions
         user_seqs_for_pred = user_seqs.apply(lambda x: x[0])
-        # Obtain a list with all sequences of interactions
+        # Permute the users so that they are in the same
+        # order as in the test sparse matrix
+        user_test_data_order = list(user2fm_ix.keys())
+        user_seqs_for_pred = user_seqs_for_pred.loc[user_test_data_order]
+        # Split users into train and validation parts
+        train_user_ids, val_user_ids = train_test_split(
+          user_ids, test_size=self.valid_size, random_state=self.random_state
+          )
+        # Obtain lists with sequences of work ids
         train_seqs = user_seqs.loc[train_user_ids].sum()
         val_seqs = user_seqs.loc[val_user_ids].sum()
         print(f'Total {len(train_user_ids)} users, {len(train_seqs)} sequences of length <= {self.max_seq_len} in train set.')
@@ -439,4 +444,5 @@ class RNNDatasetMaker:
           user_vocab=user2fm_ix,
           embs=self.item_embs,
         )
+        print('Done.')
         return rnn_dataset
