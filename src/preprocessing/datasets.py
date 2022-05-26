@@ -62,16 +62,22 @@ def make_seqs(user_items: list, max_seq_len: int = 20):
 
 
 class LeftPaddedDataset(torch.utils.data.Dataset):
-    def __init__(self, seqs: list, vocab: dict, max_seq_len=20):
+    def __init__(self, seqs: list, vocab: dict,
+        max_seq_len: int = 20, mode: str ='train'):
         """
-        A Dataset for the task
-        :param seqs: sequences from a train/val/test split
-        :param vocab: dict
+        A Dataset for the language model, padded on the left
+        seqs: sequences from a train/val/test split
+        max_seq_len: maximal sequence len to pad/cut
+        mode: indicates whether to provide targets ('mode' = train)
+        or just items (`mode` = pred). Changes the type of the output :(
         """
         self.seqs = seqs
         self.vocab = vocab
         self.padding_ix = self.vocab['<PAD>']
         self.max_seq_len = max_seq_len
+        if mode not in ('train', 'pred'):
+            raise ValueError('Unknown mode (must be "train" or "pred")')
+        self.mode = mode
 
     def __len__(self):
         return len(self.seqs)
@@ -82,18 +88,24 @@ class LeftPaddedDataset(torch.utils.data.Dataset):
         item = item[:self.max_seq_len]
         # pad FROM THE LEFT
         item = [self.padding_ix] * max(self.max_seq_len - len(item), 0) + item 
-        item, label = item[:-1], item[1:]
-        return item, label
+        if self.mode == 'train':
+            # We try to predict the next item in the sequence,
+            # So the labels are items shifted by 1 to the right
+            item, label = item[:-1], item[1:]
+            return item, label
+        return item
             
     def collate_fn(self, batch):
         """
-        Technical method to form a batch to feed into recurrent network
+        Technical method to form a batch to feed into a language model
         """
         # items = pack_sequence([torch.tensor(pair[0]) for pair in batch], enforce_sorted=False)
         # labels = pack_sequence([torch.tensor(pair[1]) for pair in batch], enforce_sorted=False)
-        items = torch.LongTensor([pair[0] for pair in batch])
-        labels = torch.LongTensor([pair[1] for pair in batch])
-        return items, labels
+        if self.mode == 'train':
+            items = torch.LongTensor([pair[0] for pair in batch])
+            labels = torch.LongTensor([pair[1] for pair in batch])
+            return items, labels
+        return torch.LongTensor(batch)
 
 
 @dataclass
@@ -109,10 +121,12 @@ class FMDataset:
 class RNNDataset:
     train_data: list
     train_dataset: LeftPaddedDataset
-    train_data_for_pred: pd.Series
     val_data: list
     val_dataset: LeftPaddedDataset
-    test_data: coo_matrix
+    pred_data: list
+    pred_dataset: LeftPaddedDataset
+    train_interactions: coo_matrix
+    test_interactions: coo_matrix
     item_vocab: dict
     user_vocab: dict
     embs: torch.Tensor
@@ -407,6 +421,10 @@ class RNNDatasetMaker:
           torch.zeros(1, self.item_embs.shape[1])))
 
         print('Constructing train RNN dataset...')
+        # Construct train interactions for prediction
+        train_data, _ = dataset.build_interactions(
+            marks_df_train[['user_id', 'work_id']].to_numpy()
+            )
         # Get sequences of item ids for each user, in chronological order
         # and break them down into subsequences of length <= `max_seq_len`
         marks_df_train.sort_values(by=['user_id', 'date'], inplace=True)
@@ -419,6 +437,7 @@ class RNNDatasetMaker:
         # order as in the test sparse matrix
         user_test_data_order = list(user2fm_ix.keys())
         user_seqs_for_pred = user_seqs_for_pred.loc[user_test_data_order]
+        pred_seqs = user_seqs_for_pred.tolist()
         # Split users into train and validation parts
         train_user_ids, val_user_ids = train_test_split(
           user_ids, test_size=self.valid_size, random_state=self.random_state
@@ -432,14 +451,18 @@ class RNNDatasetMaker:
         # Define the datasets
         train_dataset = LeftPaddedDataset(train_seqs, item2fm_ix, self.max_seq_len)
         val_dataset = LeftPaddedDataset(val_seqs, item2fm_ix, self.max_seq_len)
+        pred_dataset = LeftPaddedDataset(pred_seqs, item2fm_ix,
+            self.max_seq_len, mode='pred')
 
         rnn_dataset = RNNDataset(
           train_data=train_seqs,
-          train_data_for_pred=user_seqs_for_pred,
           train_dataset=train_dataset,
           val_data=val_seqs,
           val_dataset=val_dataset,
-          test_data=test_data,
+          pred_data=pred_seqs,
+          pred_dataset=pred_dataset,
+          train_interactions=train_data,
+          test_interactions=test_data,
           item_vocab=item2fm_ix,
           user_vocab=user2fm_ix,
           embs=self.item_embs,
