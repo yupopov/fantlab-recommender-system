@@ -68,8 +68,8 @@ class Trainer:
             train_info = self._train_epoch(train_loader)
             val_info = self._val_epoch(val_loader)
             self.history["train_loss"].append(train_info["epoch_train_loss"])
-            self.history["train_acc"].append(train_info["epoch_train_acc"])
-            # self.history["val_loss"].append(val_info["epoch_val_loss"])
+            # self.history["train_acc"].append(train_info["epoch_train_acc"])
+            self.history["val_loss"].append(val_info["epoch_val_loss"])
             # self.history["val_acc"].append(val_info["epoch_val_acc"])
         return self.model.eval()
 
