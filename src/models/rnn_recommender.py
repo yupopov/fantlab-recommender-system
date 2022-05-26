@@ -6,13 +6,15 @@ from torch.nn import Module, Embedding, LSTM, RNN, GRU, Linear, Sequential, Drop
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
+from src.preprocessing.datasets import LeftPaddedDataset
+
 cell_types = {
             "RNN": RNN,
             "GRU": GRU,
             "LSTM": LSTM
             }
 
-class RecurrentRecommender(Module):
+class RecurrentLanguageModel(Module):
     def __init__(self, config: dict, vocab: dict, embs: torch.Tensor):
         super().__init__()
         self.vocab = vocab
@@ -58,6 +60,35 @@ class RecurrentRecommender(Module):
         self.out_dropout
         return self.out_proj(hidden_states)
         # return predicts
+
+
+class RecurrentRecommender(Module):
+    """
+    A wrapper over RecurrentLanguageModel
+    """
+    def __init__(self, lm: RecurrentLanguageModel,
+        pred_dataset: LeftPaddedDataset, #user_vocab: dict
+        ):
+        super().__init__()
+        self.lm = lm
+        self.pred_dataset = pred_dataset
+        # self.user_vocab = user_vocab
+
+    def forward(self, user_ids: list):
+        seq_batch = self.pred_dataset.collate_fn(
+          [self.pred_dataset[user_id] for user_id in user_ids]
+        ) # seq_batch: (len(user_ids), self.pred_dataset.max_seq_len)
+        batch_preds = self.lm(seq_batch)
+        # batch_preds contains all hidden states of the last RNN layer
+        # batch_preds: (len(user_ids), self.pred_dataset.max_seq_len, len(self.model.vocab))
+        # Leave the last hidden state of the last layer
+        # We use it to predict the next item in the sequence
+        batch_preds = batch_preds[:, -1, :].detach().numpy()
+        # batch_preds: (len(user_ids), len(self.model.vocab))
+        return batch_preds
+
+
+
 
 
         

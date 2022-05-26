@@ -38,9 +38,10 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
             ).reshape(batch_len, num_items)
         elif model.__class__.__name__ == 'LinearRecommender':
             batch_predicts = model.predict(user_batch).toarray()
-            # print(batch_predicts.shape)
+        elif model.__class__.__name__ == 'RecurrentRecommender':
+            batch_predicts = model.forward(user_batch)
         if train_interactions is not None:
-            batch_train_interactions = train_interactions_csr[user_batch]. \
+            batch_train_interactions = train_interactions_csr[user_batch].\
                 toarray().astype(bool)
             batch_predicts = np.where(
                 ~batch_train_interactions, batch_predicts, -np.Inf
