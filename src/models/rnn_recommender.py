@@ -77,21 +77,20 @@ class RecurrentRecommender(Module):
         ):
         super().__init__()
         self.lm = lm
+        self.device = 'cuda' if next(self.lm.parameters()).is_cuda else 'cpu'
         self.pred_dataset = pred_dataset
         # self.user_vocab = user_vocab
 
     def forward(self, user_ids: list):
         seq_batch = self.pred_dataset.collate_fn(
           [self.pred_dataset[user_id] for user_id in user_ids]
-        ) # seq_batch: (len(user_ids), self.pred_dataset.max_seq_len)
-        cuda = torch.device('cuda')
-        seq_batch = seq_batch.to(device=cuda)
+        ).to(self.device) # seq_batch: (len(user_ids), self.pred_dataset.max_seq_len)
         batch_preds = self.lm(seq_batch)
         # batch_preds contains all hidden states of the last RNN layer
         # batch_preds: (len(user_ids), self.pred_dataset.max_seq_len, len(self.model.vocab))
         # Leave the last hidden state of the last layer
         # We use it to predict the next item in the sequence
-        batch_preds = batch_preds[:, -1, : -1].detach().cpu().numpy()
+        batch_preds = batch_preds[:, -1, :-1].detach().cpu().numpy()
         # batch_preds: (len(user_ids), len(self.model.vocab))
         return batch_preds
 

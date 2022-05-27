@@ -402,6 +402,11 @@ class RNNDatasetMaker:
         test_data, _ = dataset.build_interactions(
             marks_df_test[['user_id', 'work_id']].to_numpy()
             )
+        print('Constructing train and val RNN datasets...')
+        # Construct train interactions for prediction
+        train_data, _ = dataset.build_interactions(
+            marks_df_train[['user_id', 'work_id']].to_numpy()
+            )
         # Save user and item enumerations
         user2fm_ix = dataset.mapping()[0]
         item2fm_ix = dataset.mapping()[2]
@@ -420,11 +425,6 @@ class RNNDatasetMaker:
         self.item_embs = torch.cat((self.item_embs,
           torch.zeros(1, self.item_embs.shape[1])))
 
-        print('Constructing train RNN dataset...')
-        # Construct train interactions for prediction
-        train_data, _ = dataset.build_interactions(
-            marks_df_train[['user_id', 'work_id']].to_numpy()
-            )
         # Get sequences of item ids for each user, in chronological order
         # and break them down into subsequences of length <= `max_seq_len`
         marks_df_train.sort_values(by=['user_id', 'date'], inplace=True)
@@ -442,6 +442,8 @@ class RNNDatasetMaker:
         train_user_ids, val_user_ids = train_test_split(
           user_ids, test_size=self.valid_size, random_state=self.random_state
           )
+        assert len(np.intersect1d(train_user_ids, val_user_ids)) == 0, \
+            'Train and val user sets intersect!'
         # Obtain lists with sequences of work ids
         train_seqs = user_seqs.loc[train_user_ids].sum()
         val_seqs = user_seqs.loc[val_user_ids].sum()

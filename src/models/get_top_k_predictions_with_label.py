@@ -44,7 +44,7 @@ def get_top_k_predictions_with_labels(model, test_interactions, train_interactio
             batch_train_interactions = train_interactions_csr[user_batch].\
                 toarray().astype(bool)
             batch_predicts = np.where(
-                ~batch_train_interactions[:, :-1], batch_predicts, -np.Inf
+                ~batch_train_interactions, batch_predicts, -np.Inf
             )
         # batch_top_k_predictions = np.argsort(-batch_predicts, axis=1)[:, :k]
         # batch_top_k_pred_indices = np.argsort(-batch_predicts, axis=1)[:, :k]
