@@ -5,7 +5,7 @@ This is a project aimed at creating recommendation system for russian e-library 
 
 Here is a little repository content guide.
 
-### [Data/raw](github.com/yupopov/fantlab-recommender-system/tree/main/data/raw)
+### [Data/raw](tree/main/data/raw)
 
 Data/raw folder contains: 
 - [work_ids.txt](github.com/yupopov/fantlab-recommender-system/blob/main/data/raw/work_ids.txt) parsed work ids
