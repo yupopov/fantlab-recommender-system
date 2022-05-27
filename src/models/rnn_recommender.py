@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 from torch.nn.functional import sigmoid, relu, elu, tanh
@@ -7,6 +8,9 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 from src.preprocessing.datasets import LeftPaddedDataset
+from src.models.get_top_k_predictions_with_label import get_top_k_predictions_with_labels
+from src.models.trainer import Trainer
+
 
 cell_types = {
             "RNN": RNN,
@@ -83,9 +87,11 @@ class RecurrentRecommender(Module):
         # batch_preds: (len(user_ids), self.pred_dataset.max_seq_len, len(self.model.vocab))
         # Leave the last hidden state of the last layer
         # We use it to predict the next item in the sequence
-        batch_preds = batch_preds[:, -1, :].detach().numpy()
+        batch_preds = batch_preds[:, -1, : -1].detach().cpu().numpy()
         # batch_preds: (len(user_ids), len(self.model.vocab))
         return batch_preds
+
+
 
 
 
