@@ -19,6 +19,7 @@ This is a folder which contains all the information used during the model fittin
 - embeddings obtained by different ways stored in torch tensor/np.array/sparse matrix
 - work descriptions, raw and prepared to consume by all the models, assembled to a dictionary
 - key to index dictionary in case of using work descriptions as a list, not dictionary
+- LightFM dataset in pickle format
 
 ### [src/data_retrieval](github.com/yupopov/fantlab-recommender-system/tree/main/src/data_retrieval)
 
