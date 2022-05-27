@@ -10,7 +10,7 @@ from src.models.trainer import Trainer
 def run_experiment(dataset,
                    net_config: dict,
                    trainer_config: dict,
-                   net_class=RecurrentRecommender,
+                   net_class=RecurrentLanguageModel,
                    trainer_class=Trainer,
                    random_seed=17
                    ):
@@ -26,11 +26,11 @@ def run_experiment(dataset,
     # and the dataloaders
 
 
-    train_dataset = rnn_dataset.train_dataset
+    train_dataset = dataset.train_dataset
     train_dataloader = DataLoader(train_dataset, batch_size=trainer_config['batch_size'], collate_fn=train_dataset.collate_fn, shuffle=True)
 
 
-    val_dataset = rnn_dataset.val_dataset
+    val_dataset = dataset.val_dataset
     val_dataloader = DataLoader(val_dataset, batch_size=trainer_config['batch_size'], collate_fn=train_dataset.collate_fn, shuffle=True)
   
     # initialize the model and the trainer
@@ -41,7 +41,7 @@ def run_experiment(dataset,
 
     return trainer
 
-def plot_experiments(keys: list, experiments_results: dict, bottom=4, top=8.5, n_experiments=3):
+def plot_experiments(keys: list, experiments_results: dict, bottom=4, top=8.5, n_experiments=5):
     fig, ax = plt.subplots(1, 2, figsize=(14, 7))
     for n in range(0, n_experiments):
         avg_val_acc = experiments_results['train_loss_hists'][n]
@@ -65,6 +65,8 @@ def plot_experiments(keys: list, experiments_results: dict, bottom=4, top=8.5, n
 def run_n_experiments(dataset,
                       net_config: dict,
                       trainer_config: dict,
+                      bottom=4,
+                      top=8.5,
                       n_experiments=5):
     """
     Run n experiments with the same params
@@ -133,8 +135,9 @@ def run_n_experiments(dataset,
     print(f'Ran {n_experiments} experiments.')
     print(f'Min val loss {min_val_loss:.4f} achieved by run {best_run} on epoch {best_epoch}.')
     print(f'Avg min loss: {min_val_losses.mean():.4f}')
-
-    plot_experiments(exp_results.keys(), exp_results, n_experiments)
+    
+    print(exp_results['train_loss_hists'])
+    plot_experiments(exp_results.keys(), exp_results, bottom=nottom, top=top, n_experiments=n_experiments)
     
 
     return exp_results
