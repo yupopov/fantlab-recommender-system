@@ -136,8 +136,7 @@ def run_n_experiments(dataset,
     print(f'Min val loss {min_val_loss:.4f} achieved by run {best_run} on epoch {best_epoch}.')
     print(f'Avg min loss: {min_val_losses.mean():.4f}')
     
-    print(exp_results['train_loss_hists'])
-    plot_experiments(exp_results.keys(), exp_results, bottom=nottom, top=top, n_experiments=n_experiments)
+    plot_experiments(exp_results.keys(), exp_results, bottom=bottom, top=top, n_experiments=n_experiments)
     
 
     return exp_results
