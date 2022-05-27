@@ -7,6 +7,8 @@ from torch.nn import Module, Embedding, LSTM, RNN, GRU, Linear, Sequential, Drop
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
+import torch.cuda
+
 from src.preprocessing.datasets import LeftPaddedDataset
 from src.models.get_top_k_predictions_with_label import get_top_k_predictions_with_labels
 from src.models.trainer import Trainer
@@ -82,6 +84,8 @@ class RecurrentRecommender(Module):
         seq_batch = self.pred_dataset.collate_fn(
           [self.pred_dataset[user_id] for user_id in user_ids]
         ) # seq_batch: (len(user_ids), self.pred_dataset.max_seq_len)
+        cuda = torch.device('cuda')
+        seq_batch = seq_batch.to(device=cuda)
         batch_preds = self.lm(seq_batch)
         # batch_preds contains all hidden states of the last RNN layer
         # batch_preds: (len(user_ids), self.pred_dataset.max_seq_len, len(self.model.vocab))
