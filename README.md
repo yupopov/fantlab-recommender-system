@@ -1,5 +1,5 @@
 # Fantlab recommender system
-This is a project aimed at creating recommendation system for russian e-library [fantlab.ru](fantlab.ru). At the moment there are some datasets, python modules to create them and [LightFM](making.lyst.com/lightfm/docs/home.html) collaborative filtration model, showing decent results. Also a content-based model will be available soon.
+This is a project aimed at creating recommendation system for russian e-library [fantlab.ru](fantlab.ru). At the moment there are some datasets, python modules to create them and [LightFM](making.lyst.com/lightfm/docs/home.html) collaborative filtration model, showing decent results. Also a content model represented by session-based RNN is available.  
 
 # Repository content
 
@@ -8,9 +8,10 @@ Here is a little repository content guide.
 ### [Data/raw](github.com/yupopov/fantlab-recommender-system/tree/main/data/raw)
 
 Data/raw folder contains: 
-- parsed work ids
-- works information file
-- work features file
+- [work_ids.txt](github.com/yupopov/fantlab-recommender-system/blob/main/data/raw/work_ids.txt) parsed work ids
+- [work_infos.json.gz](github.com/yupopov/fantlab-recommender-system/blob/main/data/raw/work_infos.json.gz) works information file packed in json and compressed to gzip
+- [item_features.json.gz](github.com/yupopov/fantlab-recommender-system/blob/main/data/raw/item_features.json.gz) work features file packed in json and compressed to gzip
+- [work_marks.csv.gz](github.com/yupopov/fantlab-recommender-system/blob/main/data/raw/work_marks.csv.gz) work marks table packed to csv and compressed to gzip  
 
 ### [Data/interim](github.com/yupopov/fantlab-recommender-system/tree/main/data/interim )
 
@@ -30,7 +31,12 @@ Folder which is needed to obtain data from Fantlab public API, contains:
 Folder containing models modules:
 - [LinearRecommender.py](github.com/yupopov/fantlab-recommender-system/blob/main/src/models/LinearRecommender.py) module which eats user interaction matrix and work embeddings and builds personal content recommendation for every user 
 - [lightfm.py](github.com/yupopov/fantlab-recommender-system/blob/main/src/models/lightfm.py) custom recommend function 
+- [rnn_recommender.py](github.com/yupopov/fantlab-recommender-system/blob/main/src/models/rnn_recommender.py) module which contains content-based recurrent recommendation system
 - [get_top_k_predictions_with_label.py](github.com/yupopov/fantlab-recommender-system/blob/main/src/models/get_top_k_predictions_with_label.py) auxiliary module to get predictions from the model 
+
+### [src/experiments](github.com/yupopov/fantlab-recommender-system/tree/main/src/experiments)
+Folder where you can find the methods to run experiments to check stability of recurrent model (only)
+
 ### [src/preprocessing](github.com/yupopov/fantlab-recommender-system/tree/main/src/preprocessing)
 
 Folder containing data preprocessing modules:
