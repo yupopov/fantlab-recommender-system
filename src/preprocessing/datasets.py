@@ -303,7 +303,7 @@ class RNNDatasetMaker:
     def __init__(
       self,
       n_last_years=10,
-      time_q=0.9,
+      time_q=0.8,
       marks_df_path='data/raw/work_marks.csv.gz',
       embs_path='data/interim/bert_embeddings.pt',
       item2emb_ix_path='data/interim/key2index.json.gz',
