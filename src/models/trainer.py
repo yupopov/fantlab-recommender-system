@@ -7,7 +7,6 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from tqdm.notebook import tqdm
 
-from .rnn_recommender import RecurrentRecommender
 
 
 class Trainer:
